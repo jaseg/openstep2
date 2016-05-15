@@ -1,56 +1,64 @@
 #!/usr/bin/env python3
 
 import serial
-from matplotlib import pyplot as plt
 import math
 import time
 import numpy as np
+from pyqtgraph.Qt import QtGui, QtCore
+import pyqtgraph as pg
+import threading
 
 w = 400
 
-def plot(chunk):
-    global ydata, line
-    ydata = np.concatenate((ydata[len(chunk):], chunk))
-    for n, line in enumerate(lines):
-        line.set_ydata(ydata[:,n])
-    fig.canvas.update()
-    fig.canvas.flush_events()
-
-def chunked(gen, n):
-    while True:
-        l = []
-        for _ in range(n):
-            l.append(next(gen))
-        yield l
-
-plt.ion()
-
 ser = serial.Serial('/dev/serial/by-id/usb-1a86_USB2.0-Serial-if00-port0', 500000)
-time.sleep(0.5)
-ser.flush()
-ser.readline()
-n = (len(ser.readline())-1)//3
-ydata = np.zeros((w,n))
 
-plx = math.ceil(math.sqrt(n))
-ply = math.ceil(n/plx)
-fig, axs = plt.subplots(plx, ply, sharex=True, sharey=True)
-
-lines = []
-
-for ch, ax in zip(range(n), axs.flatten()):
-    ax.set_xlim([0, w-1])
-    ax.set_ylim([-2048, 2047])
-    line, = ax.plot(np.arange(0, w), np.zeros((w, 1)), alpha=0.7)
-    lines.append(line)
-
-def rxgen():
+def rxgen(ser, n):
     while True:
         line = ser.readline()[:-1]
         if len(line) == 3*n:
             yield [int(line[i:i+3], 16)-2048 for i in range(0, 32*3, 3)]
 
-for i, chunk in enumerate(chunked(rxgen(), 10)):
-    plot(chunk)
-    print('frame', i)
+time.sleep(0.5)
+ser.flush()
+ser.readline()
+ser.readline()
+n = len(ser.readline()[:-1])//3
+ydata = np.zeros((n, w))
+
+plx = math.ceil(math.sqrt(n))
+ply = math.ceil(n/plx)
+
+app = QtGui.QApplication([])
+view = pg.GraphicsView()
+gl = pg.GraphicsLayout()
+view.setCentralWidget(gl)
+view.show()
+view.resize(800,800)
+
+ps = [ gl.addPlot(row=x, col=y) for x in range(plx) for y in range(ply) if plx*y+x < n ]
+pls = [ p.plot(np.arange(w), np.zeros(w)) for p in ps ]
+for p in ps:
+	p.setYRange(-2048, 2047)
+print(len(ps), len(pls))
+
+def populate():
+    global n, ser, ydata, pls
+    for i, frame in enumerate(rxgen(ser, n)):
+        ydata[:, :-1] = ydata[:, 1:]
+        ydata[:, -1] = np.array(frame)
+        for j, p in enumerate(pls):
+            p.setData(np.arange(w), ydata[j, :])
+        print('frame', i)
+th = threading.Thread(target=populate, daemon=True)
+th.start()
+
+# Fix Ctrl+C behavior
+import signal
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+## Start Qt event loop unless running in interactive mode.
+if __name__ == '__main__':
+    import sys
+    if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+        QtGui.QApplication.instance().exec_()
 
