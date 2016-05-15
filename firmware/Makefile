@@ -19,7 +19,7 @@ main.lst: main.c
 
 .PHONY: program
 program: main.elf
-	avrdude -c arduino -P /dev/serial/by-id/usb-1a86_USB2.0-Serial-if00-port0 -b 57600 -p atmega328p -U flash:w:$<
+	avrdude -c arduino -P /dev/serial/by-id/usb-1a86_USB2.0-Serial-if00-port0 -b 115200 -p atmega328p -U flash:w:$<
 
 .PHONY:	clean
 clean:
