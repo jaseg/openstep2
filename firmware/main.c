@@ -127,7 +127,7 @@ void adc_set_gain(uint8_t gain) {
      * 3    800
      * 4  1,600 */
     ADC_GAIN_SEL_ENA_PORT &= ~(1<<ADC_GAIN_SEL_ENA_PIN);
-    ADC_GAIN_SEL_PORT &= ~(1<<ADC_GAIN_SEL_PINS);
+    ADC_GAIN_SEL_PORT &= ~(3<<ADC_GAIN_SEL_PINS);
     ADC_GAIN_SEL_ENA_PORT |= (!!gain)<<ADC_GAIN_SEL_ENA_PIN;
     ADC_GAIN_SEL_PORT |= (gain-1)<<ADC_GAIN_SEL_PINS;
 }
@@ -207,49 +207,50 @@ ISR (TIMER2_OVF_vect) {
     TCCR2B  = 0;
     sei();
 
-    /* LED cycle */
-    SPCR         &= ~(1<<SPR0); /* set SPI speed to 4MHz */
-    ADC_CS_PORT  |=   1<<ADC_CS_PIN; /* deassert ADC SPI CS */
-
-    debug_leds(1);
-    volatile uint8_t *bcm_ptr = &bcm_fb[fb_idx*BCM_FB_SIZE];
-    for (uint8_t i=0; i<BCM_BITS; i++) {
-        for (uint8_t j=0; j<BCM_NUM_REGS; j++) {
-            SPDR = *bcm_ptr++;
-            while (!(SPSR&(1<<SPIF)));
-        }
-        /* TIMER1 running @1/8clk → 2MHz; .5μs per clk. */
-        const uint16_t strobe_pulse_width = 2UL; /* 2 clock cycles → 1μs */
-        uint16_t pulse_width_counts = 5UL /* 2.5μs */ << i;
-        OCR1A   = strobe_pulse_width;
-        TCNT1   = pulse_width_counts - 1;
-        ICR1    = pulse_width_counts; /* timer max; 1μs to account for strobe pulse width */
-        TCCR1B |= (1<<CS11);
-        while (TCCR1B & (1<<CS11)) /* wait for interrupt to finish */
-            handle_host_cmd_rx();
-        /*     bit|    delay|  clks
-         *     ---+---------+------
-         *     0  |    2.5μs|     5
-         *     1  |    5  μs|    10
-         *     2  |   10  μs|    20
-         *     3  |   20  μs|    40
-         *     4  |   40  μs|    80
-         *     5  |   80  μs|   160
-         *     6  |  160  μs|   320
-         *     7  |  320  μs|   640
-         *     8  |  640  μs| 1,280
-         *     9  |1.28   ms| 2,560
-         *     10 |2.56   ms| 5,120
-         *     11 |5.12   ms|10,240
-         */
-    }
-    debug_leds(2);
+//  /* LED cycle */
+//  SPCR         &= ~(1<<SPR0); /* set SPI speed to 4MHz */
+//  ADC_CS_PORT  |=   1<<ADC_CS_PIN; /* deassert ADC SPI CS */
+//
+//  debug_leds(1);
+//  volatile uint8_t *bcm_ptr = &bcm_fb[fb_idx*BCM_FB_SIZE];
+//  for (uint8_t i=0; i<BCM_BITS; i++) {
+//      for (uint8_t j=0; j<BCM_NUM_REGS; j++) {
+//          SPDR = *bcm_ptr++;
+//          while (!(SPSR&(1<<SPIF)));
+//      }
+//      /* TIMER1 running @1/8clk → 2MHz; .5μs per clk. */
+//      const uint16_t strobe_pulse_width = 2UL; /* 2 clock cycles → 1μs */
+//      uint16_t pulse_width_counts = 5UL /* 2.5μs */ << i;
+//      OCR1A   = strobe_pulse_width;
+//      TCNT1   = pulse_width_counts - 1;
+//      ICR1    = pulse_width_counts; /* timer max; 1μs to account for strobe pulse width */
+//      TCCR1B |= (1<<CS11);
+//      while (TCCR1B & (1<<CS11)) /* wait for interrupt to finish */
+//          handle_host_cmd_rx();
+//      /*     bit|    delay|  clks
+//       *     ---+---------+------
+//       *     0  |    2.5μs|     5
+//       *     1  |    5  μs|    10
+//       *     2  |   10  μs|    20
+//       *     3  |   20  μs|    40
+//       *     4  |   40  μs|    80
+//       *     5  |   80  μs|   160
+//       *     6  |  160  μs|   320
+//       *     7  |  320  μs|   640
+//       *     8  |  640  μs| 1,280
+//       *     9  |1.28   ms| 2,560
+//       *     10 |2.56   ms| 5,120
+//       *     11 |5.12   ms|10,240
+//       */
+//  }
+//  debug_leds(2);
 
     /* ADC cycle */
     SPCR         |=   1<<SPR0; /* set SPI speed to 1MHz (maximum for the ADC chip) */
     for (uint8_t sel=0; sel<ADC_CHANNELS; sel++) {
         ADC_SEL_PORT &= ~(0x1F<<ADC_SEL_PINS);
         ADC_SEL_PORT |= sel<<ADC_SEL_PINS;
+        _delay_us(1000UL);
         ADC_CS_PORT  &= ~(1<<ADC_CS_PIN); /* assert ADC SPI CS */
 
         SPDR = 0x60; /* Start conversion */
