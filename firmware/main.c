@@ -247,27 +247,36 @@ ISR (TIMER2_OVF_vect) {
 
     /* ADC cycle */
     SPCR         |=   1<<SPR0; /* set SPI speed to 1MHz (maximum for the ADC chip) */
-    for (uint8_t sel=0; sel<ADC_CHANNELS; sel++) {
-        ADC_SEL_PORT &= ~(0x1F<<ADC_SEL_PINS);
-        ADC_SEL_PORT |= sel<<ADC_SEL_PINS;
-        _delay_us(1000UL);
-        ADC_CS_PORT  &= ~(1<<ADC_CS_PIN); /* assert ADC SPI CS */
+    for (uint8_t chipsel=0; chipsel<4; chipsel++) {
+        ADC_SEL_PORT &= ~(0x18<<ADC_SEL_PINS);
+        _delay_us(100UL);
+        ADC_SEL_PORT |= (chipsel<<3)<<ADC_SEL_PINS;
+        _delay_us(100UL);
+        uint16_t* outbuf = sample_buf+chipsel*8;
+        for (uint8_t sel=0; sel<8; sel++) {
+            ADC_SEL_PORT &= ~(0x07<<ADC_SEL_PINS);
+            _delay_us(100UL);
+            ADC_SEL_PORT |= sel<<ADC_SEL_PINS;
+            _delay_us(1000UL);
+            ADC_CS_PORT  &= ~(1<<ADC_CS_PIN); /* assert ADC SPI CS */
 
-        SPDR = 0x60; /* Start conversion */
-        while (!(SPSR&(1<<SPIF)));
+            SPDR = 0x60; /* Start conversion */
+            while (!(SPSR&(1<<SPIF)));
 
-        SPDR = 0; /* receive data from ADC */
-        while (!(SPSR&(1<<SPIF)));
-        sample_buf[sel] = SPDR<<4;
+            SPDR = 0; /* receive data from ADC */
+            while (!(SPSR&(1<<SPIF)));
+            outbuf[sel] = SPDR<<4;
 
-        SPDR = 0; /* continue receiving data from ADC */
-        while (!(SPSR&(1<<SPIF)));
-        ADC_CS_PORT  |= 1<<ADC_CS_PIN; /* assert ADC SPI CS */
-        sample_buf[sel] |= SPDR&0xF;
+            SPDR = 0; /* continue receiving data from ADC */
+            while (!(SPSR&(1<<SPIF)));
+            ADC_CS_PORT  |= 1<<ADC_CS_PIN; /* assert ADC SPI CS */
+            outbuf[sel] |= SPDR&0xF;
+        }
     }
 
     start_tx_samples();
     cli();
+    TCNT2   = 0;
     TCCR2B  = (1<<CS22) | (1<<CS20);
     TIMSK2 |= 1<<TOIE2;
 }
